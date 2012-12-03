@@ -49,7 +49,7 @@ import re
 from tornado import escape
 from tornado.log import gen_log
 
-from tornado._locale_data import LOCALE_NAMES
+from tornado._locale_data import LOCALE_NAMES, PSEUDOLOCALE_ACCENT_MAP
 
 _default_locale = "en_US"
 _translations = {}
@@ -443,3 +443,41 @@ class GettextLocale(Locale):
             return self.ngettext(message, plural_message, count)
         else:
             return self.gettext(message)
+
+
+class PseudoLocale(Locale):
+    def __init__(self):
+        super(PseudoLocale, self).__init__(self.CODE, None)
+
+    def translate(self, message, plural_message=None, count=None):
+        if plural_message is not None:
+            assert count is not None
+            if count > 1:
+                message = plural_message
+        return self.pseudolocalize(message)
+
+class BracketPseudoLocale(PseudoLocale):
+    CODE = 'xx_BR'
+
+    def pseudolocalize(self, message):
+        return '[ %s ]' % message
+
+class AccentPseudoLocale(PseudoLocale):
+    CODE = 'xx_AC'
+
+    def __init__(self):
+        super(AccentPseudoLocale, self).__init__()
+
+    def pseudolocalize(self, message):
+        return re.sub('[ -~]',
+                      lambda m: PSEUDOLOCALE_ACCENT_MAP[m.group(0)], message)
+
+def load_pseudo_translations():
+    if not hasattr(Locale, '_cache'):
+        Locale._cache = {}
+    codes = []
+    for cls in [BracketPseudoLocale, AccentPseudoLocale]:
+        Locale._cache[cls.CODE] = cls()
+        codes.append(cls.CODE)
+    global _supported_locales
+    _supported_locales = frozenset(list(_supported_locales) + codes)
